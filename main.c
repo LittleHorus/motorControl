@@ -3,7 +3,7 @@
 #include "main.h"
 
 /******************************************************************************/
-#define UART_TIMEOUT 1000//20000
+#define UART_TIMEOUT 10000//20000
 #define OPCODE_DRIVER_ENABLE 0x02
 #define OPCODE_DRIVER_DISABLE 0x01
 #define OPCODE_DRIVER_MODE 0x03
@@ -43,7 +43,7 @@ void setReg(uint16_t data);
 unsigned short crc16modbus_tx(uint16_t *modbus_data, uint16_t length);
 unsigned short crc16modbus_rx(uint8_t *modbus_data, uint8_t length);
 
-uint16_t modbus_rx_buf[100], modbus_tx_buf[100];
+uint16_t modbus_rx_buf[50], modbus_tx_buf[50];
 uint8_t modbus_rx_counter = 0, modbus_tx_counter = 0, modbus_rx_length = 0, modbus_tx_length = 0, modbus_rx_flag = 0;
 uint16_t modbus_freq = 0, modbus_freq_rd = 0;
 uint16_t driver_frequency = 0;
@@ -76,6 +76,8 @@ uint8_t OpCode = 0;
 uint8_t optionSpeed = 0, optionHandControl = 0, optionLoad = 0;
 uint16_t optionAdcThreshold = 2047;
 uint16_t adc_value = 0;
+uint16_t soc_array[100];
+uint8_t soc_array_head = 0;
 #define RS485 0
 #define DISCRETE 1
 //uint8_t type = RS485;
@@ -93,6 +95,10 @@ uint8_t discreteMotorState = STOPPED;
 
 #define DRIVER_MODE_MANUAL 0 
 #define DRIVER_MODE_MODBUS 1
+
+#define STATE_STOP 0
+#define STATE_FORWARD_ROTATE 1
+#define STATE REVERSE_ROTATE 2
 
 #define ROTATE_STOPPED 0   
 #define ROTATE_STABLE_FORWARD 1
@@ -136,9 +142,12 @@ struct motorStruct{
 float maxVoltage = 0;
 uint8_t freqLock = 0;
 uint16_t resPwmCounter = 0;
-uint32_t brakingChangeDutyCycleDelay = 0, accelerateChangeDutyCycleDelay = 0;
+uint32_t brakingChangeDutyCycleDelay = 0, accelerateChangeDutyCycleDelay = 0, stableRotateDutyCycleDelay = 0;
 uint8_t accelarationStatus = 0;
 uint8_t brakeResEnable = 0;
+uint32_t net_address_update_cycle = 0;
+uint32_t finite_state_machine_cycle = 0;
+uint8_t hardfault_exception_raised = 0;
 
 uint16_t speedControl = 0;
 uint16_t regInfo[7], tAdcValue = 0;//settlingSpeed - max value 3000(equal to rpm)
@@ -150,6 +159,7 @@ uint8_t hallAState = 0, hallAPrestate = 0;
 uint16_t settlingSpeed = 0, settlingSpeedPrev = 0;
 uint32_t motorStepTimer = 0;
 uint16_t rotateSumResult = 0,  rotateSum = 0,  rotateArray[120],rotateHead = 0; 
+uint16_t adc_voltage_monitor_filtered_value = 0;
 /******************************************************************************/
 void delay_10us(uint32_t delay){
     delayUsCnt = delay;
@@ -186,6 +196,18 @@ float vMonitoringEvaluate(uint16_t adcValue){
     return tVoltage;
 }
 //******************************************************************************
+uint16_t adc_exp_filtering(uint16_t data_input){
+	float din = (float) data_input;
+	float k = 0.05;
+	return ((uint16_t)(din*(k)+(float)(adc_voltage_monitor_filtered_value)*(1.0-k)));
+}
+uint16_t manual_rotate_speed_evaluate(uint16_t data_input){
+	uint16_t tDataInput = data_input;
+	if(tDataInput > 4050)tDataInput = 4050;
+	if(tDataInput < 50)tDataInput = 50;
+	uint8_t resultHzValue = (uint8_t)(data_input/82);
+	return resultHzValue;
+}
 //******************************************************************************
 uint8_t accelerateFromStoppedToFreq(uint16_t freq, uint8_t maxStep){
     uint8_t accelerateStatus = 0;
@@ -306,12 +328,14 @@ void brakingCallback(void){
 			}
 			else{
 				if(motorControl.rotatePWMValue >= 25) motorControl.rotatePWMValue -= 25;
+				else motorControl.rotatePWMValue = 0;
 			}
 			pwmUpdateValue(motorControl.rotatePWMValue);
       
 		}
 		else{
 			if(motorControl.rotatePWMValue >= 5) motorControl.rotatePWMValue -= 5;
+			else motorControl.rotatePWMValue = 0;
 			pwmUpdateValue(motorControl.rotatePWMValue);
 		}
 		if(motorControl.rotateCurrentSpeed > 7)brakingChangeDutyCycleDelay = 50000;
@@ -545,54 +569,47 @@ void send_reset_pulse(void){
 
 }
 
-void rotate_stable(){
-
+void rotate_stable(void){
 	if(motorControl.rotateCurrentSpeed == motorControl.freqModbus){
-
 
 	}
 	else if(motorControl.rotateCurrentSpeed > motorControl.freqModbus){
-
-
+		if((motorControl.rotateCurrentSpeed - motorControl.freqModbus)>4) if(motorControl.rotatePWMValue >= 7)motorControl.rotatePWMValue -= 7;
+		if(((motorControl.rotateCurrentSpeed - motorControl.freqModbus) > 2)&&((motorControl.rotateCurrentSpeed - motorControl.freqModbus)<=4)){
+			if(motorControl.rotatePWMValue>=2) motorControl.rotatePWMValue -= 2;
+		}
+		if((motorControl.rotateCurrentSpeed - motorControl.freqModbus) <= 2)if(motorControl.rotatePWMValue>=1) motorControl.rotatePWMValue -= 1;
+		pwmUpdateValue(motorControl.rotatePWMValue);
 	}
 	else{
-
-
+		if((motorControl.freqModbus - motorControl.rotateCurrentSpeed) > 4) if(motorControl.rotatePWMValue < 470) motorControl.rotatePWMValue += 7;
+		if(((motorControl.freqModbus - motorControl.rotateCurrentSpeed) > 2)&&((motorControl.freqModbus - motorControl.rotateCurrentSpeed)<=4)){
+			if(motorControl.rotatePWMValue < 470) motorControl.rotatePWMValue += 2;
+		}
+		if((motorControl.freqModbus - motorControl.rotateCurrentSpeed) <= 2)if(motorControl.rotatePWMValue < 470) motorControl.rotatePWMValue += 1;
+		pwmUpdateValue(motorControl.rotatePWMValue);
 	}
+	stableRotateDutyCycleDelay = 20000;//0.2sec update time
 
 }
 void rotate_acceleration_forward(){
-
 	if(accelerateChangeDutyCycleDelay == 0)accelerateCallback();
 }
 void rotate_deceleration_forward(){
-
 	if(brakingChangeDutyCycleDelay == 0)brakingCallback();
 }
 void rotate_acceleration_reverse(){
-
 	if(accelerateChangeDutyCycleDelay == 0)accelerateCallback();
 }
 void rotate_deceleration_reverse(){
-
 	if(brakingChangeDutyCycleDelay == 0)brakingCallback();
 }
-
-
-/*
-	brakeResEnable = 0;
-	if((motorControl.rotateCurrentSpeed >= motorControl.freqManual)||(freqLock == 1)){
-		if(motorStepTimer == 0){
-			runMotorStable(motorControl.freqManual, 1);
-			motorStepTimer = 20000;
-		}
-		freqLock = 1;
-	}
-	else {
-		if(accelerateChangeDutyCycleDelay == 0)accelerateCallback();
-	}
- *
- * */
+void rotate_stable_forward(){
+	if(stableRotateDutyCycleDelay == 0)rotate_stable();
+}
+void rotate_stable_reverse(){
+	if(stableRotateDutyCycleDelay == 0)rotate_stable();
+}
 
 
 void finite_state_machine(){
@@ -601,50 +618,75 @@ void finite_state_machine(){
 
 	}
 	if((motorControl.rotateMode == 0x00)&&(motorControl.rotateModePrev == 0x01)){//braking procedure, (forward direction))
-
-
-
+		rotate_deceleration_forward();
+		if(motorControl.rotateCurrentSpeed == 0x00){
+			motorControl.rotateModePrev = 0x00;
+			motorControl.rotatePWMValue = 0;
+			pwmUpdateValue(motorControl.rotatePWMValue);
+		}
 	}
 	if((motorControl.rotateMode == 0x00)&&(motorControl.rotateModePrev == 0x02)){//braking procedure, (reverse direction)
-
-
+		rotate_deceleration_reverse();
+		if(motorControl.rotateCurrentSpeed == 0x00){
+			motorControl.rotateModePrev = 0x00;
+			motorControl.rotatePWMValue = 0;
+			pwmUpdateValue(motorControl.rotatePWMValue);
+		}
 	}
 	if((motorControl.rotateMode == 0x01)&&(motorControl.rotateModePrev == 0x00)){//start from idle state, forward direction
-
-
+		if(motorControl.rotateCurrentSpeed == 0x00){
+			DRIVER_DIR_FORWARD;
+			motorControl.rotateDirection = 0;
+		}
+		rotate_acceleration_forward();
 	}
 	if((motorControl.rotateMode == 0x02)&&(motorControl.rotateModePrev == 0x00)){//start from idle state, reverse direction
-
-
+		if(motorControl.rotateCurrentSpeed == 0x00){
+			DRIVER_DIR_REVERSE;
+			motorControl.rotateDirection = 1;
+		}
+		rotate_acceleration_reverse();
 	}
-	if((motorControl.rotateMode == 0x01)&&(motorControl.rotateModePrev == 0x02)){//change rotate direction
-
-
+	if((motorControl.rotateMode == 0x01)&&(motorControl.rotateModePrev == 0x02)){//change rotate direction from reverse to forward
+		if(motorControl.rotateCurrentSpeed == 0x00){
+			DRIVER_DIR_FORWARD;
+			motorControl.rotateDirection = 0;
+			motorControl.rotateModePrev = 0x01;
+		}
+		else{
+			rotate_deceleration_reverse();
+		}
+	}
+	if((motorControl.rotateMode == 0x02)&&(motorControl.rotateModePrev == 0x01)){//change rotate direction from forward to reverse
+		if(motorControl.rotateCurrentSpeed == 0x00){
+			DRIVER_DIR_REVERSE;
+			motorControl.rotateDirection = 1;
+			motorControl.rotateModePrev = 0x02;
+		}
+		else{
+			rotate_deceleration_forward();
+		}
 	}
 	if((motorControl.rotateMode == 0x01)&&(motorControl.rotateModePrev = 0x01)){//stable rotate, forward direction
-
-
-
+		rotate_stable_forward();
 	}
 	if((motorControl.rotateMode == 0x02)&&(motorControl.rotateModePrev == 0x02)){//stable rotate, reverse direction
-
-
+		rotate_stable_reverse();
 	}
 
 }
 
 void set_default_motorControl(void){
-	motorControl.driverMode = DRIVER_MODE_MANUAL;
+	motorControl.driverMode = DRIVER_MODE_MODBUS;
 	motorControl.rotateDirection = 0;
-	motorControl.freqManual = 40;
+	motorControl.freqManual = 5;
 	motorControl.rotatePWMValue = 0;
 	motorControl.emfExceedSupplyVoltage = 55;
-	motorControl.freqModbus = 0;
+	motorControl.freqModbus = 5;
 	motorControl.rotateDeltaSpeed = 2;
-	motorControl.rotateMode = ROTATE_STOPPED;
-	motorControl.rotateModePrev = ROTATE_STOPPED;
+	motorControl.rotateMode = STATE_STOP;
+	motorControl.rotateModePrev = STATE_STOP;
 	motorControl.supplyVoltage = vMonitoringEvaluate(adcArray[0]);
-
 }
 
 /******************************************************************************/
@@ -652,20 +694,19 @@ int main()
 {
 	sys_init();//base peripheral initialization
 	adc_init();//control current through motor +++
-	usart_init();
-	spi1_init();
+	usart_init();//rs485 uart2
+	spi1_init();//driver settings
 	tim2_init();//interrupt timer
 	tim1_pwm_init();//control speed of motor rotation
 
-	delay_10us(50000);
+	delay_10us(50000);//0.5sec
 
-	set_default_motorControl();
-  
+	set_default_motorControl();//default values for struct
+
 	SPI1_CS_HIGH;
-	DRIVER_ENABLE;
-  
-	delay_10us(1000);
-  
+	DRIVER_ENABLE;//power up driver mcu
+	delay_10us(1000);//10ms wakeup delay
+
 	setReg(0x1040);//0x1040
 	setReg(0x1833);
 	setReg(0x2733);
@@ -676,8 +717,21 @@ int main()
             
 /******************************************************************************/
 	while(1){
-		netAddress = _get_net_address();
+		if(net_address_update_cycle == 0){
+			net_address_update_cycle = 50000;
+			netAddress = _get_net_address();
+		}
 
+		if(finite_state_machine_cycle == 0){
+			finite_state_machine_cycle = 10000;//100ms
+			finite_state_machine();
+		}
+		if(uartRxPacketReady == 1){
+			modbus_read_command();
+			uartRxPacketReady=0;
+		}
+
+		/*
 		if(netAddress == 0x00){
 			BRAKE_OFF;
 			tAdcValue = 0;
@@ -720,12 +774,8 @@ int main()
 			}//reg2 == 64
 		}//netAddress
 
-		if(uartRxPacketReady == 1)
-		{
-			modbus_read_command();
-			uartRxPacketReady=0;
-		}
 
+*/
   
     /*
     if(type==DISCRETE)
@@ -846,6 +896,7 @@ void tim2_init(void){
 	NVIC_InitTypeDef NVIC_Init__Structure;
     NVIC_Init__Structure.NVIC_IRQChannel = TIM2_IRQn;
     NVIC_Init__Structure.NVIC_IRQChannelCmd = ENABLE;
+    NVIC_Init__Structure.NVIC_IRQChannelPriority = 1;//1;
     NVIC_Init(&NVIC_Init__Structure);
 
     TIM.TIM_ClockDivision = TIM_CKD_DIV1;
@@ -1035,7 +1086,6 @@ void adc_init(void){
 }
 /******************************************************************************/
 
-
 /******************************************************************************/
 void usart_init(void){
     USART_InitTypeDef USART_InitStructure;
@@ -1059,7 +1109,7 @@ void usart_init(void){
   
     NVIC_InitStructure.NVIC_IRQChannel = USART2_IRQn; 
     NVIC_InitStructure.NVIC_IRQChannelCmd = ENABLE;
-    NVIC_InitStructure.NVIC_IRQChannelPriority = 2;//1;
+    NVIC_InitStructure.NVIC_IRQChannelPriority = 0;//1;
     NVIC_Init(&NVIC_InitStructure);
 
     USART_InitStructure.USART_BaudRate = 38400;
@@ -1092,7 +1142,7 @@ void USART2_IRQHandler(void){
             uartRxCnt = 0;
             uartRxPacketReady = 1;
         }
-        if((uartRxCnt > 2)&&(uartRxCnt > modbus_rx_length)){//something gone wrong, clear counter, packet not processsing
+        if((uartRxCnt > 2)&&(uartRxCnt > modbus_rx_length)){//something gone wrong, clear counter
             uartRxCnt = 0;
         }
         USART_ClearITPendingBit(USART2, USART_IT_RXNE); 
@@ -1115,13 +1165,13 @@ void USART2_IRQHandler(void){
 /******************************************************************************/
 void _send_error_code(uint8_t cmd, uint8_t error_code){
     uint16_t temp_crc_value = 0;
-    modbus_tx_buf[0] = (uint8_t) _get_net_address();
-    modbus_tx_buf[1] = (uint8_t) (0x80+cmd);
+    modbus_tx_buf[0] = (uint8_t) netAddress;
+    modbus_tx_buf[1] = (uint8_t) (0x80+(cmd&0x0f));
     modbus_tx_buf[2] = (uint8_t) error_code;
     temp_crc_value = crc16modbus_tx(modbus_tx_buf, 3);
     modbus_tx_buf[3] = (uint8_t)(temp_crc_value&0xff);//lo byte
     modbus_tx_buf[4] = (uint8_t)(temp_crc_value>>8);//hi byte
-    
+    modbus_tx_length = 5;
     //uartTxCnt=0;
     //GPIO_SetBits(GPIOA, GPIO_Pin_1); //DE to tx
     //USART_ITConfig(USART2, USART_IT_TC, ENABLE);
@@ -1134,9 +1184,11 @@ void TIM2_IRQHandler(void){
 		if(uart_timeout_cnt < UART_TIMEOUT) uart_timeout_cnt++;
 		if(uart_timeout_cnt == UART_TIMEOUT){
 			uart_timeout_cnt++;
-			//uartRxCnt = 0;
+			uartRxCnt = 0;
 		}
-
+		if(stableRotateDutyCycleDelay != 0)stableRotateDutyCycleDelay--;
+		if(finite_state_machine_cycle != 0)finite_state_machine_cycle--;
+		if(net_address_update_cycle != 0)net_address_update_cycle--;
 		if(timeout != 0) timeout--;
 		if(delayUsCnt != 0)delayUsCnt--;
 		if(motorStepTimer != 0)motorStepTimer--;//change pwm pulse width with period
@@ -1150,7 +1202,8 @@ void TIM2_IRQHandler(void){
 			butnTimerCnt = 0;
 		}
     
-		motorControl.monitoringVoltage = vMonitoringEvaluate(adcArray[0]);
+		adc_voltage_monitor_filtered_value = adc_exp_filtering(adcArray[0]);
+		motorControl.monitoringVoltage = vMonitoringEvaluate(adc_voltage_monitor_filtered_value);
 		if(motorControl.monitoringVoltage > maxVoltage) maxVoltage = motorControl.monitoringVoltage;
     
 		rpmTimer++;
@@ -1170,6 +1223,9 @@ void TIM2_IRQHandler(void){
 			rpmValue = rotateSumResult;
 			motorControl.rotateCurrentSpeed = rotateSumResult;
 			rpmCnt = 0;
+
+			soc_array[soc_array_head++] = adcArray[1];
+			if(soc_array_head>99)soc_array_head=0;
 		}
     
 		resPwmCounter++;
@@ -1281,7 +1337,7 @@ void modbus_read_command(){
     	  modbus_tx_length = 7;
 
     	  if((modbus_rx_buf[2] == 0xfd) && (modbus_rx_buf[3] == 0x00)){
-          modbus_tx_buf[0] = _get_net_address();
+          modbus_tx_buf[0] = netAddress;
           modbus_tx_buf[1] = 0x03;//read cmd
           modbus_tx_buf[2] = 0x02;//bytes count
           modbus_tx_buf[3] = (uint8_t)(motorControl.freqModbus>>8);//
@@ -1294,6 +1350,7 @@ void modbus_read_command(){
           GPIO_SetBits(GPIOA, GPIO_Pin_1); //DE to tx
           USART_ITConfig(USART2, USART_IT_TC, ENABLE);
           USART_SendData(USART2, modbus_tx_buf[uartTxCnt]);
+
       }
     }//read_cmd
     
@@ -1302,7 +1359,7 @@ void modbus_read_command(){
     	if(modbus_rx_buf[2] == 0xfa){
     		if(modbus_rx_buf[3] == 0x00){
     			if((modbus_rx_buf[4] == 0xc0) && (modbus_rx_buf[5] == 0x00)) _set_stop_driver();
-    			if((modbus_rx_buf[4] == 0xc4) && (modbus_rx_buf[5] == 0x00)) { if(netAddress==2)_set_start_driver();  if(netAddress==3)_set_reverse_driver();}
+    			if((modbus_rx_buf[4] == 0xc4) && (modbus_rx_buf[5] == 0x00)) _set_start_driver();
     			if((modbus_rx_buf[4] == 0xc6) && (modbus_rx_buf[5] == 0x00)) _set_reverse_driver();
     			if((modbus_rx_buf[4] == 0xe0) && (modbus_rx_buf[5] == 0x00)) _set_reset_driver();
 
@@ -1326,13 +1383,14 @@ void modbus_read_command(){
     		modbus_tx_buf[7] = (uint8_t)(t_crc16>>8);
     	}
     	else{
-    		_send_error_code(_get_net_address(), 0x13);//
+    		_send_error_code(modbus_rx_buf[4], 0x13);//
     	}
 
         uartTxCnt=0;
         GPIO_SetBits(GPIOA, GPIO_Pin_1); //DE to tx
         USART_ITConfig(USART2, USART_IT_TC, ENABLE);
         USART_SendData(USART2, modbus_tx_buf[uartTxCnt]);
+
     }//write_cmd
     if((modbus_rx_buf[1] == 0x10) && (modbus_rx_buf[2] == 0x18)){//write block cmd
     	modbus_tx_length = 8;
@@ -1345,12 +1403,13 @@ void modbus_read_command(){
             if(modbus_rx_buf[7] == 0xc6)_set_reverse_driver();
         }
         else{
-            _send_error_code(_get_net_address(), 0x13);
+            //_send_error_code(netAddress, 0x13);
         }
         uartTxCnt=0;
         GPIO_SetBits(GPIOA, GPIO_Pin_1);//DE to tx
         USART_ITConfig(USART2, USART_IT_TC, ENABLE);
         USART_SendData(USART2, modbus_tx_buf[uartTxCnt]);
+
 
     }//write_block_cmd
   }//net_address
