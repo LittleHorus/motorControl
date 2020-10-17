@@ -156,9 +156,16 @@ uint16_t butnTimerCnt = 0, butnSpeedPressCnt = 0, butnSpeedPressState = 0, butnS
 
 uint32_t rpmTimer = 0, rpmCnt = 0, rpmValue = 0;
 uint8_t hallAState = 0, hallAPrestate = 0; 
+float expFilter_k = 0.5,old_value_float = 0;
+uint8_t freqMeasFlag = 0;
+uint32_t freqMeasCnt = 0, rpmFromFreq = 0;
+float pulseTime = 0;
+uint16_t hall_unbounce_timer = 0, hall_A_cnt = 0, actualRPM = 0, hall_A_sampling_timer = 0;
 uint16_t settlingSpeed = 0, settlingSpeedPrev = 0;
 uint32_t motorStepTimer = 0;
-uint16_t rotateSumResult = 0,  rotateSum = 0,  rotateArray[120],rotateHead = 0; 
+uint16_t rotateSumResult = 0,  rotateSum = 0,  rotateArray[20], rotateHead = 0;
+uint16_t rotateArray_down[20], rotateSum_down = 0, rotateHead_down = 0;
+uint16_t rpmCnt_down = 0;
 uint16_t adc_voltage_monitor_filtered_value = 0;
 /******************************************************************************/
 void delay_10us(uint32_t delay){
@@ -712,7 +719,7 @@ int main()
 	setReg(0x2733);
 	setReg(0x2a66);
 	BRAKE_OFF;
-  
+
 	TIM_CtrlPWMOutputs(TIM1, ENABLE);//enable output for pwm
             
 /******************************************************************************/
@@ -1040,10 +1047,22 @@ uint16_t spiCustomRead(uint8_t reg){
   	SPI_SCLK_LOW;
   	return 0;
 }
+uint16_t expFilter(uint16_t new_value, uint16_t old_value){
+	old_value_float = expFilter_k*((float)new_value) + (1-expFilter_k)*((float)old_value_float);
+	uint16_t result = (uint16_t) old_value_float;
+	return result;
+}
+uint16_t evaluateFreq(uint16_t input_cnt, uint8_t pol){
+	uint16_t t_period = input_cnt*2;
+	pulseTime = ((float) t_period)*10e-6;
+	float t_freq = 1/pulseTime;
+	return ((uint16_t)t_freq);
+}
+
 /******************************************************************************/
 void adc_init(void){
     DMA_InitTypeDef DMA_InitStructure;
-    
+
     RCC_AHBPeriphClockCmd(RCC_AHBPeriph_DMA1, ENABLE);  
     DMA_InitStructure.DMA_BufferSize = 5;
     DMA_InitStructure.DMA_DIR = DMA_DIR_PeripheralSRC;
@@ -1205,42 +1224,83 @@ void TIM2_IRQHandler(void){
 		adc_voltage_monitor_filtered_value = adc_exp_filtering(adcArray[0]);
 		motorControl.monitoringVoltage = vMonitoringEvaluate(adc_voltage_monitor_filtered_value);
 		if(motorControl.monitoringVoltage > maxVoltage) maxVoltage = motorControl.monitoringVoltage;
-    
+
+		hall_unbounce_timer++;
+		if(HALL_A_PIN)hall_A_cnt++;
+		if(hall_unbounce_timer >= 50){//500uSec
+			hall_unbounce_timer = 0;
+			if(hall_A_cnt >= 30){
+				hallAState = 1;
+				if((hallAState == 1)&&(hallAPrestate == 0)){
+					rpmCnt++;
+					//freqMeasFlag = 1;
+				}
+
+			}
+			else{
+				hallAState = 0;
+				if((hallAState == 0)&&(hallAPrestate == 1)) {
+					rpmCnt_down++;
+					if(freqMeasFlag == 1){
+						//rpmFromFreq = evaluateFreq(freqMeasCnt, 3);
+					}
+					freqMeasFlag = 0;
+					freqMeasCnt = 0;
+				}
+			}
+			hall_A_cnt = 0;
+			hallAPrestate = hallAState;
+			hall_A_sampling_timer++;
+			if(hall_A_sampling_timer >= 20){
+				hall_A_sampling_timer = 0;
+				//actualRPM = expFilter(rpmCnt, actualRPM);
+				rotateArray_down[rotateHead_down++] = rpmCnt_down;
+				rotateArray[rotateHead++] = rpmCnt;
+				rpmCnt = 0;
+				rpmCnt_down = 0;
+				if(rotateHead == 10)rotateHead = 0;
+				if(rotateHead_down == 10)rotateHead_down = 0;
+				rotateSum = 0;
+				rotateSum_down = 0;
+				for(uint8_t iR = 0; iR < 10; iR++){
+					rotateSum += rotateArray[iR];
+					rotateSum_down += rotateArray_down[iR];
+				}
+				motorControl.rotateCurrentSpeed  = (rotateSum/3);
+
+				soc_array[soc_array_head++] = adcArray[1];
+				if(soc_array_head>99)soc_array_head=0;
+			}
+		}
+		//if(freqMeasFlag == 1)freqMeasCnt++;//10uSec
+		/*
 		rpmTimer++;
-		hallAState = HALL_A_PIN;
-		if((hallAState == 1)&&(hallAPrestate == 0)) rpmCnt++;
-		hallAPrestate = hallAState;
 		if(rpmTimer >= 1000){
 			rpmTimer = 0;
 			rotateArray[rotateHead++] = rpmCnt;
-			if(rotateHead == 100)rotateHead = 0;
+			if(rotateHead == 10)rotateHead = 0;
 			rotateSum = 0;
-			for(uint8_t iR = 0; iR < 100; iR++){
+			for(uint8_t iR = 0; iR < 10; iR++){
 				rotateSum += rotateArray[iR];
-          
 			}
 			rotateSumResult = (rotateSum/4);
 			rpmValue = rotateSumResult;
 			motorControl.rotateCurrentSpeed = rotateSumResult;
 			rpmCnt = 0;
+		}*/
 
-			soc_array[soc_array_head++] = adcArray[1];
-			if(soc_array_head>99)soc_array_head=0;
-		}
-    
+
 		resPwmCounter++;
 		if(resPwmCounter >= 100)resPwmCounter = 0;
 		if(brakingChangeDutyCycleDelay != 0)brakingChangeDutyCycleDelay--;
 		if(accelerateChangeDutyCycleDelay != 0)accelerateChangeDutyCycleDelay--;
-   
+
 		if(brakeResEnable == 1){
 			brakingResistor(0);
 		}
 		else{
 			GPIO_ResetBits(GPIOB, GPIO_Pin_10);
-      
 		}
-    
 		TIM_ClearITPendingBit(TIM2, TIM_IT_Update);
 	}//TIM_IT_UPDATE flag set
 }//TIM2_IRQHandler
