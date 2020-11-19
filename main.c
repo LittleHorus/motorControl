@@ -180,6 +180,14 @@ uint16_t rpmCnt_down = 0;
 uint16_t adc_voltage_monitor_filtered_value = 0;
 uint16_t adc_monitor_timer = 0;
 uint16_t rotateHallACounter = 0;
+
+uint16_t pwm_array[51] = {0,50,60,70,80,90, 100, 110, 120, 130, 140,
+150,155,160,165,170,175,180,185,190,195,
+200,205,210,215,220,225,230,235,240,245,
+250,255,260,265,270,275,280,285,290,295,
+300,305,310,315,320,325,330,335,340,345};
+
+
 /******************************************************************************/
 void delay_10us(uint32_t delay){
     delayUsCnt = delay;
@@ -536,46 +544,7 @@ uint8_t runMotor(uint16_t param){
 	return tAdcValue;
 }
 
-uint8_t stateMonitor(){//actual state monitoring (direction, stop) 
-	uint8_t state = 0;
 
-	if(motorControl.rotateMode == ROTATE_STOPPED){
-		if(motorControl.rotateCurrentSpeed == 0);
-		else {motorControl.rotatePWMValue = 0;pwmUpdateValue(motorControl.rotatePWMValue);}
-	}
-	if(motorControl.rotateMode == ROTATE_STABLE_FORWARD){
-		if(motorControl.rotateModePrev == ROTATE_STABLE_FORWARD){
-			runMotorStable(motorControl.freqManual, 1);
-		}
-		if(motorControl.rotateModePrev == ROTATE_ACCELERATE_FORWARD){
-			if(motorControl.rotateCurrentSpeed >= motorControl.freqManual){
-				motorControl.rotateModePrev = ROTATE_STABLE_FORWARD;
-			}
-			else{
-				//accelerate until done
-			}
-      
-		}
-	}
-	if(motorControl.rotateMode == ROTATE_STABLE_BACKWARD){
-		if(motorControl.rotateModePrev == ROTATE_STABLE_BACKWARD){
-			runMotorStable(motorControl.freqManual, 1);
-		}
-	}
-	if(motorControl.rotateMode == ROTATE_ACCELERATE_FORWARD){
-    
-	}
-	if(motorControl.rotateMode == ROTATE_ACCELERATE_BACKWARD){
-    
-	}
-	if(motorControl.rotateMode == ROTATE_BRAKING_FORWARD){
-    
-	}
-	if(motorControl.rotateMode == ROTATE_BRAKING_BACKWARD){
-    
-	}
-	return state;
-}
 
 
 uint8_t controlBEMF(float valueEMF){
@@ -650,15 +619,12 @@ void fault_state_proc(uint16_t fault_reg){
 	}
 }
 
-
 void finite_state_machine(){
 	if((motorControl.rotateMode == 0x00)&&(motorControl.rotateModePrev == 0x00)){
 		motorControl.rotatePWMValue = 0;//reset pwm signal value to driver input
-
 	}
 	if((motorControl.rotateMode == 0x00)&&(motorControl.rotateModePrev == 0x01)){//braking procedure, (forward direction))
 		//rotate_deceleration_forward();
-
 		spi_read_write(0x1044);
 		brakeResEnable = 1;
 
@@ -680,7 +646,6 @@ void finite_state_machine(){
 			spi_read_write(0x1040);
 			BRAKE_ON;
 		}
-
 		if(motorControl.rotateCurrentSpeed == 0x00){
 			BRAKE_OFF;
 			spi_read_write(0x1040);
@@ -759,22 +724,31 @@ void coast_mode_off(){
 	setReg(0x1040);
 }
 
+uint16_t get_pwm_from_frequency(uint8_t frequency){
+	uint16_t temp_pwm_data = pwm_array[frequency];
+
+
+
+
+	return temp_pwm_data;
+}
+
 
 void start_boost_sequence(void){
 	if(boost_state == 0){
-		motorControl.rotatePWMValue = 150;
+		motorControl.rotatePWMValue = 120;
 		pwmUpdateValue(motorControl.rotatePWMValue);
 		boost_state = 1;
 		boost_delay = 500000;
 	}
 	else if((boost_state == 1)&&(boost_delay == 0)){
-		motorControl.rotatePWMValue = 200;
+		motorControl.rotatePWMValue = 180;
 		pwmUpdateValue(motorControl.rotatePWMValue);
 		boost_state = 2;
 		boost_delay = 500000;
 	}
 	else if((boost_state == 2)&&(boost_delay == 0)){
-		motorControl.rotatePWMValue = 250;
+		motorControl.rotatePWMValue = 220;
 		pwmUpdateValue(motorControl.rotatePWMValue);
 		boost_state = 3;
 		boost_delay = 500000;
@@ -1499,7 +1473,7 @@ void TIM2_IRQHandler(void){
 					rotateSum += rotateArray[iR];
 					rotateSum_down += rotateArray_down[iR];
 				}
-				motorControl.rotateCurrentSpeed  = (rotateSum/4);
+				motorControl.rotateCurrentSpeed  = (rotateSum/8);
 
 				soc_array[soc_array_head++] = adcArray[1];
 				if(soc_array_head>99)soc_array_head=0;
