@@ -16,6 +16,8 @@
 #define LOAD_LIFT 0x01
 #define LOAD_GUN 0x02
 
+#define MOTOR_POLE_X2 8
+
 /******************************************************************************/
 void sys_init(void);
 uint8_t _get_net_address(void);
@@ -167,7 +169,7 @@ uint16_t butnTimerCnt = 0, butnSpeedPressCnt = 0, butnSpeedPressState = 0, butnS
 
 uint32_t rpmTimer = 0, rpmCnt = 0, rpmValue = 0;
 uint8_t hallAState = 0, hallAPrestate = 0; 
-float expFilter_k = 0.5,old_value_float = 0;
+float expFilter_k = 0.7,old_value_float = 0;
 uint8_t freqMeasFlag = 0;
 uint32_t freqMeasCnt = 0, rpmFromFreq = 0;
 float pulseTime = 0;
@@ -181,11 +183,11 @@ uint16_t adc_voltage_monitor_filtered_value = 0;
 uint16_t adc_monitor_timer = 0;
 uint16_t rotateHallACounter = 0;
 
-uint16_t pwm_array[51] = {0,50,60,70,80,90, 100, 110, 120, 130, 140,
-150,155,160,165,170,175,180,185,190,195,
-200,205,210,215,220,225,230,235,240,245,
-250,255,260,265,270,275,280,285,290,295,
-300,305,310,315,320,325,330,335,340,345};
+uint16_t pwm_array[51] = {0,50,50,50,50,68, 85, 90, 105, 110, 115,
+120,130,143,140,150,163,170,179,185,191,
+200,210,215,220,229,240,251,258,260,270,
+275,280,285,290,295,300,305,310,315,320,
+325,330,335,340,345,350,355,360,365,370};
 
 
 /******************************************************************************/
@@ -430,18 +432,18 @@ void slowDecayOff(){
 void accelerateCallback(void){
 	if(motorControl.rotateCurrentSpeed < motorControl.freqManual){
 		if(motorControl.rotateCurrentSpeed == 0){
-			if(motorControl.rotatePWMValue<50)motorControl.rotatePWMValue += 50;
-			else motorControl.rotatePWMValue += 4;
+			if(motorControl.rotatePWMValue<90)motorControl.rotatePWMValue += 90;
+			else motorControl.rotatePWMValue += 5;
 			pwmUpdateValue(motorControl.rotatePWMValue);
 		}
 		if((motorControl.rotateCurrentSpeed>0)&&(motorControl.rotateCurrentSpeed <= 10)){
 			if(motorControl.rotatePreviousSpeed >= motorControl.rotateCurrentSpeed){
 				if((motorControl.rotatePreviousSpeed - motorControl.rotateCurrentSpeed)>1){
-					if(motorControl.rotatePWMValue <= 480)motorControl.rotatePWMValue += 10;
+					if(motorControl.rotatePWMValue <= 480)motorControl.rotatePWMValue += 22;//10
 					pwmUpdateValue(motorControl.rotatePWMValue);//update duty cycle
 				}
 				else{
-					if(motorControl.rotatePWMValue <= 480)motorControl.rotatePWMValue += 4;
+					if(motorControl.rotatePWMValue <= 480)motorControl.rotatePWMValue += 8;//4
 					pwmUpdateValue(motorControl.rotatePWMValue);//update duty cycle
 				}
 			}
@@ -449,11 +451,11 @@ void accelerateCallback(void){
 		if((motorControl.rotateCurrentSpeed>10)&&(motorControl.rotateCurrentSpeed <= 20)){
 			if(motorControl.rotatePreviousSpeed >= motorControl.rotateCurrentSpeed){
 				if((motorControl.rotatePreviousSpeed - motorControl.rotateCurrentSpeed)>1){
-					if(motorControl.rotatePWMValue <= 480)motorControl.rotatePWMValue += 7;
+					if(motorControl.rotatePWMValue <= 480)motorControl.rotatePWMValue += 15;
 					pwmUpdateValue(motorControl.rotatePWMValue);//update duty cycle
 				}
 				else{
-					if(motorControl.rotatePWMValue <= 480)motorControl.rotatePWMValue += 4;
+					if(motorControl.rotatePWMValue <= 480)motorControl.rotatePWMValue += 5;
 					pwmUpdateValue(motorControl.rotatePWMValue);//update duty cycle
 				}
 			}
@@ -461,11 +463,11 @@ void accelerateCallback(void){
 		if((motorControl.rotateCurrentSpeed>20)&&(motorControl.rotateCurrentSpeed <= 30)){
 			if(motorControl.rotatePreviousSpeed >= motorControl.rotateCurrentSpeed){
 				if((motorControl.rotatePreviousSpeed - motorControl.rotateCurrentSpeed)>1){
-					if(motorControl.rotatePWMValue <= 480)motorControl.rotatePWMValue += 5;
+					if(motorControl.rotatePWMValue <= 480)motorControl.rotatePWMValue += 8;
 					pwmUpdateValue(motorControl.rotatePWMValue);//update duty cycle
 				}
 				else{
-					if(motorControl.rotatePWMValue <= 480)motorControl.rotatePWMValue += 2;
+					if(motorControl.rotatePWMValue <= 480)motorControl.rotatePWMValue += 1;
 					pwmUpdateValue(motorControl.rotatePWMValue);//update duty cycle
 				}
 			}
@@ -529,13 +531,13 @@ uint8_t runMotor(uint16_t param){
 	if(rpmValue < settlingSpeed){
 		if((settlingSpeed - rpmValue) > 7);
 		if((7>(settlingSpeed - rpmValue))&&((settlingSpeed - rpmValue) > 5)) tAdcValue += 5;
-		if((1 < (settlingSpeed - rpmValue))&&((settlingSpeed - rpmValue) < 5)) tAdcValue += 1;
+		if((1 < (settlingSpeed - rpmValue))&&((settlingSpeed - rpmValue) < 5)) tAdcValue += 2;
     
 	}
 	else{//rpmValue >= settlingSpeed
 		if((rpmValue - settlingSpeed) > 7);
 		if((7>(rpmValue - settlingSpeed))&&((rpmValue - settlingSpeed) > 5)) if(tAdcValue>=5)tAdcValue -= 5;
-		if((1 < (rpmValue - settlingSpeed))&&((rpmValue - settlingSpeed) < 5)) if(tAdcValue>=2)tAdcValue -= 1;
+		if((1 < (rpmValue - settlingSpeed))&&((rpmValue - settlingSpeed) < 5)) if(tAdcValue>=2)tAdcValue -= 2;
         
 	}
 	TIM_PWM.TIM_Pulse = tAdcValue;
@@ -644,10 +646,10 @@ void finite_state_machine(){
 		}
 		if((motorControl.rotateCurrentSpeed < 10)&&(motorControl.rotateCurrentSpeed > 0)){
 			spi_read_write(0x1040);
-			BRAKE_ON;
+			//BRAKE_ON;
 		}
 		if(motorControl.rotateCurrentSpeed == 0x00){
-			BRAKE_OFF;
+			//BRAKE_OFF;
 			spi_read_write(0x1040);
 			brakeResEnable = 0;
 			motorControl.rotateModePrev = 0x00;
@@ -660,6 +662,13 @@ void finite_state_machine(){
 			DRIVER_DIR_FORWARD;
 			motorControl.rotateDirection = 0;
 		}
+		//////!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+		if(motorControl.rotateCurrentSpeed != 0x00){
+			if(motorControl.rotateCurrentSpeed <= 50)motorControl.rotatePWMValue = pwm_array[motorControl.rotateCurrentSpeed];
+			pwmUpdateValue(motorControl.rotatePWMValue);
+			spi_read_write(0x1040);
+		}
+		//////!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
 		rotate_acceleration_forward();
 	}
 	if((motorControl.rotateMode == 0x02)&&(motorControl.rotateModePrev == 0x00)){//start from idle state, reverse direction
@@ -726,9 +735,6 @@ void coast_mode_off(){
 
 uint16_t get_pwm_from_frequency(uint8_t frequency){
 	uint16_t temp_pwm_data = pwm_array[frequency];
-
-
-
 
 	return temp_pwm_data;
 }
@@ -870,8 +876,8 @@ int main()
 	delay_10us(1000);//10ms wakeup delay
 
 	spi_read_write(0x1040);
-	spi_read_write(0x1833);
-	spi_read_write(0x2733);
+	spi_read_write(0x1899);
+	spi_read_write(0x2799);
 	spi_read_write(0x2a66);
 	regInfo[2] = spi_read_write(0x9040);
 	//setReg(0x1040);//0x1040
@@ -1457,6 +1463,8 @@ void TIM2_IRQHandler(void){
 			}
 			hall_A_cnt = 0;
 			hallAPrestate = hallAState;
+
+
 			hall_A_sampling_timer++;
 			if(hall_A_sampling_timer >= 200){
 				hall_A_sampling_timer = 0;
@@ -1473,12 +1481,15 @@ void TIM2_IRQHandler(void){
 					rotateSum += rotateArray[iR];
 					rotateSum_down += rotateArray_down[iR];
 				}
-				motorControl.rotateCurrentSpeed  = (rotateSum/8);
+				motorControl.rotateCurrentSpeed  = (rotateSum/MOTOR_POLE_X2);
 
 				soc_array[soc_array_head++] = adcArray[1];
 				if(soc_array_head>99)soc_array_head=0;
 			}
-		}
+		}//500uSec condition
+
+
+
 		//if(freqMeasFlag == 1)freqMeasCnt++;//10uSec
 		/*
 		rpmTimer++;
