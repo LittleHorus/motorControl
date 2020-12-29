@@ -16,7 +16,7 @@
 #define LOAD_LIFT 0x01
 #define LOAD_GUN 0x02
 
-#define MOTOR_POLE_X2 8
+#define MOTOR_POLE_X2 4
 
 /******************************************************************************/
 void sys_init(void);
@@ -443,7 +443,7 @@ void accelerateCallback(void){
 					pwmUpdateValue(motorControl.rotatePWMValue);//update duty cycle
 				}
 				else{
-					if(motorControl.rotatePWMValue <= 480)motorControl.rotatePWMValue += 8;//4
+					if(motorControl.rotatePWMValue <= 480)motorControl.rotatePWMValue += 12;//4
 					pwmUpdateValue(motorControl.rotatePWMValue);//update duty cycle
 				}
 			}
@@ -451,11 +451,11 @@ void accelerateCallback(void){
 		if((motorControl.rotateCurrentSpeed>10)&&(motorControl.rotateCurrentSpeed <= 20)){
 			if(motorControl.rotatePreviousSpeed >= motorControl.rotateCurrentSpeed){
 				if((motorControl.rotatePreviousSpeed - motorControl.rotateCurrentSpeed)>1){
-					if(motorControl.rotatePWMValue <= 480)motorControl.rotatePWMValue += 15;
+					if(motorControl.rotatePWMValue <= 480)motorControl.rotatePWMValue += 16;
 					pwmUpdateValue(motorControl.rotatePWMValue);//update duty cycle
 				}
 				else{
-					if(motorControl.rotatePWMValue <= 480)motorControl.rotatePWMValue += 5;
+					if(motorControl.rotatePWMValue <= 480)motorControl.rotatePWMValue += 6;
 					pwmUpdateValue(motorControl.rotatePWMValue);//update duty cycle
 				}
 			}
@@ -484,9 +484,9 @@ void accelerateCallback(void){
 				}
 			}
 		}
-		if(motorControl.rotateCurrentSpeed < 5)accelerateChangeDutyCycleDelay = 18000;
-		else if((motorControl.rotateCurrentSpeed >= 5)&&(motorControl.rotateCurrentSpeed<12)) accelerateChangeDutyCycleDelay = 20000;
-		else accelerateChangeDutyCycleDelay = 30000;
+		if(motorControl.rotateCurrentSpeed < 5)accelerateChangeDutyCycleDelay = 17000;
+		else if((motorControl.rotateCurrentSpeed >= 5)&&(motorControl.rotateCurrentSpeed<12)) accelerateChangeDutyCycleDelay = 18000;
+		else accelerateChangeDutyCycleDelay = 20000;
 		motorControl.rotatePreviousSpeed = motorControl.rotateCurrentSpeed;
 	}
 	else{//frequency reached
@@ -640,16 +640,10 @@ void finite_state_machine(){
 	}
 	if((motorControl.rotateMode == 0x00)&&(motorControl.rotateModePrev == 0x02)){//braking procedure, (reverse direction)
 		//rotate_deceleration_reverse();
-		if(motorControl.rotateCurrentSpeed >= 10){
-			spi_read_write(0x1044);
-			brakeResEnable = 1;
-		}
-		if((motorControl.rotateCurrentSpeed < 10)&&(motorControl.rotateCurrentSpeed > 0)){
-			spi_read_write(0x1040);
-			//BRAKE_ON;
-		}
+		spi_read_write(0x1044);
+		brakeResEnable = 1;
+
 		if(motorControl.rotateCurrentSpeed == 0x00){
-			//BRAKE_OFF;
 			spi_read_write(0x1040);
 			brakeResEnable = 0;
 			motorControl.rotateModePrev = 0x00;
@@ -666,6 +660,7 @@ void finite_state_machine(){
 		if(motorControl.rotateCurrentSpeed != 0x00){
 			if(motorControl.rotateCurrentSpeed <= 50)motorControl.rotatePWMValue = pwm_array[motorControl.rotateCurrentSpeed];
 			pwmUpdateValue(motorControl.rotatePWMValue);
+			brakeResEnable = 0;
 			spi_read_write(0x1040);
 		}
 		//////!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
@@ -676,26 +671,39 @@ void finite_state_machine(){
 			DRIVER_DIR_REVERSE;
 			motorControl.rotateDirection = 1;
 		}
+		if(motorControl.rotateCurrentSpeed != 0x00){
+			if(motorControl.rotateCurrentSpeed <= 50)motorControl.rotatePWMValue = pwm_array[motorControl.rotateCurrentSpeed];
+			pwmUpdateValue(motorControl.rotatePWMValue);
+			brakeResEnable = 0;
+			spi_read_write(0x1040);
+			motorControl.rotateDirection = 1;
+		}
 		rotate_acceleration_reverse();
 	}
 	if((motorControl.rotateMode == 0x01)&&(motorControl.rotateModePrev == 0x02)){//change rotate direction from reverse to forward
 		if(motorControl.rotateCurrentSpeed == 0x00){
+			brakeResEnable = 0;
+			spi_read_write(0x1040);
 			DRIVER_DIR_FORWARD;
 			motorControl.rotateDirection = 0;
 			motorControl.rotateModePrev = 0x01;
 		}
 		else{
-			rotate_deceleration_reverse();
+			spi_read_write(0x1044);
+			brakeResEnable = 1;
 		}
 	}
 	if((motorControl.rotateMode == 0x02)&&(motorControl.rotateModePrev == 0x01)){//change rotate direction from forward to reverse
 		if(motorControl.rotateCurrentSpeed == 0x00){
+			brakeResEnable = 0;
+			spi_read_write(0x1040);
 			DRIVER_DIR_REVERSE;
 			motorControl.rotateDirection = 1;
 			motorControl.rotateModePrev = 0x02;
 		}
 		else{
-			rotate_deceleration_forward();
+			spi_read_write(0x1044);
+			brakeResEnable = 1;
 		}
 	}
 	if((motorControl.rotateMode == 0x01)&&(motorControl.rotateModePrev = 0x01)){//stable rotate, forward direction

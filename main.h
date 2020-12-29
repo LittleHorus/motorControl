@@ -7,8 +7,8 @@ uint8_t microStop = 0;
 
 //USART defines
 /******************************************************************************/
-#define DE_RX_MODE GPIOA->BSRR = GPIO_Pin_3
-#define DE_TX_MODE GPIOA->BRR = GPIO_Pin_3
+#define DE_RX_MODE GPIOA->BSRR = GPIO_Pin_15
+#define DE_TX_MODE GPIOA->BRR = GPIO_Pin_15
 
 /******************************************************************************/
 
@@ -35,6 +35,9 @@ uint8_t microStop = 0;
 #define DRIVER_DIR_FORWARD GPIO_ResetBits(GPIOA, GPIO_Pin_10)
 #define DRIVER_DIR_REVERSE GPIO_SetBits(GPIOA, GPIO_Pin_10)
 
+#define SET_LOW_RST_PIN GPIO_ResetBits(GPIOB, GPIO_Pin_7)
+#define SET_HIGH_RST_PIN GPIO_SetBits(GPIOB, GPIO_Pin_7)
+
 #define SPI_SCLK_LOW GPIO_ResetBits(GPIOB, GPIO_Pin_3)
 #define SPI_SCLK_HIGH GPIO_SetBits(GPIOB, GPIO_Pin_3)
 #define SPI_MOSI_LOW GPIO_ResetBits(GPIOB, GPIO_Pin_5)
@@ -43,6 +46,12 @@ uint8_t microStop = 0;
 
 #define SPI1_CS_LOW GPIO_ResetBits(GPIOB, GPIO_Pin_6)
 #define SPI1_CS_HIGH GPIO_SetBits(GPIOB, GPIO_Pin_6)
+
+#define HALL_POWER_ON GPIOB->BSRR = GPIO_Pin_11
+#define HALL_POWER_OFF GPIOB->BRR = GPIO_Pin_11
+
+#define BRAKE_RESISTOR_ENABLE GPIOB->BRR = GPIO_Pin_12
+#define BRAKE_RESISTOR_DISABLE GPIOB->BSRR = GPIO_Pin_12
 /******************************************************************************/
 
 //NET_ADRESS
