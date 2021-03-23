@@ -191,6 +191,43 @@ uint16_t pwm_array[51] = {0,50,50,50,50,68, 85, 90, 105, 110, 115,
 275,280,285,290,295,300,305,310,315,320,
 325,330,335,340,345,350,355,360,365,370};
 
+//motor type:
+//#define MOTOR_POLE_2
+//#define MOTOR_POLE_3
+//#define MOTOR_POLE_4
+
+#ifdef MOTOR_POLE_2
+	#define MOTOR_POLE_X2 4
+	uint16_t pwr_array[51] = {
+		0,50,50,50,50,68, 85, 90, 105, 110, 115,
+		120,130,143,140,150,163,170,179,185,191,
+		200,210,215,220,229,240,251,258,260,270,
+		275,280,285,290,295,300,305,310,315,320,
+		325,330,335,340,345,350,355,360,365,370
+	};
+#endif
+
+#ifdef MOTOR_POLE_3
+	#define MOTOR_POLE_X2 6
+	uint16_t pwr_array[51] = {
+		0,50,50,50,50,68, 85, 90, 105, 110, 115,
+		120,130,143,140,150,163,170,179,185,191,
+		200,210,215,220,229,240,251,258,260,270,
+		275,280,285,290,295,300,305,310,315,320,
+		325,330,335,340,345,350,355,360,365,370
+	};
+#endif
+
+#ifdef MOTOR_POLE_4
+	#define MOTOR_POLE_X2 8
+	uint16_t pwr_array[51] = {
+		0,50,50,50,50,68, 85, 90, 105, 110, 115,
+		120,130,143,140,150,163,170,179,185,191,
+		200,210,215,220,229,240,251,258,260,270,
+		275,280,285,290,295,300,305,310,315,320,
+		325,330,335,340,345,350,355,360,365,370
+	};
+#endif
 
 /******************************************************************************/
 void delay_10us(uint32_t delay){
@@ -256,17 +293,21 @@ uint16_t manual_rotate_speed_evaluate(uint16_t data_input){
 void brakingCallback(void){
 	if(motorControl.rotateCurrentSpeed != 0){
 		if(motorControl.rotateCurrentSpeed > 3)brakeResEnable = 1;
-		if(motorControl.rotatePreviousSpeed > motorControl.rotateCurrentSpeed){
-			if(motorControl.rotateCurrentSpeed > 7){
+		if(motorControl.rotatePreviousSpeed > motorControl.rotateCurrentSpeed)
+		{
+			if(motorControl.rotateCurrentSpeed > 7)
+			{
 				if(motorControl.rotatePWMValue >= 15) motorControl.rotatePWMValue -= 15;
 			}
-			else{
+			else
+			{
 				if(motorControl.rotatePWMValue >= 25) motorControl.rotatePWMValue -= 25;
 				else motorControl.rotatePWMValue = 0;
 			}
 			pwmUpdateValue(motorControl.rotatePWMValue);
 		}
-		else{
+		else
+		{
 			if(motorControl.rotatePWMValue >= 5) motorControl.rotatePWMValue -= 5;
 			else motorControl.rotatePWMValue = 0;
 			pwmUpdateValue(motorControl.rotatePWMValue);
@@ -284,31 +325,25 @@ void brakingCallback(void){
 }
 /******************************************************************************/
 
-void slowDecayOn(void){  //generate back EMF
+void fastDecayOn(void){  //generate back EMF
     if((motorControl.rotateCurrentSpeed != 0)&&(motorControl.rotateCurrentSpeed < 7))BRAKE_ON;
     if(motorControl.rotateCurrentSpeed == 0) BRAKE_OFF;
                           
 }
-void slowDecayOff(){
+void fastDecayOff(){
     BRAKE_OFF;
 }
-/******************************************************************************/
-void fastAccelerateCallback(void)
-{
 
-	if(motorControl.freqManual < 50)
-	{
-		motorControl.rotatePWMValue = pwm_array[motorControl.freqManual];
-	}
-
-
-}
 /******************************************************************************/
 void accelerateCallback(void){
 	if(motorControl.rotateCurrentSpeed < motorControl.freqManual)
 	{
 		if(motorControl.rotateCurrentSpeed == 0)
 		{
+			/*
+			 * if((motorControl.modbusFreq <= 5)&&(motorControl.rotatePWMValue<50)motorControl.rotatePWMValue += 50);
+			 * else if((motorControl.modbusFreq > 5)&&(motorControl.rotatePWMValue <90)motorControl.rotatePWMValue += 90);
+			 * */
 			if(motorControl.rotatePWMValue<90)motorControl.rotatePWMValue += 90;
 			else motorControl.rotatePWMValue += 5;
 			pwmUpdateValue(motorControl.rotatePWMValue);
@@ -319,12 +354,12 @@ void accelerateCallback(void){
 			{
 				if((motorControl.rotatePreviousSpeed - motorControl.rotateCurrentSpeed)>1)
 				{
-					if(motorControl.rotatePWMValue <= 480)motorControl.rotatePWMValue += 22;//10
+					if(motorControl.rotatePWMValue <= 470)motorControl.rotatePWMValue += 22;//10
 					pwmUpdateValue(motorControl.rotatePWMValue);//update duty cycle
 				}
 				else
 				{
-					if(motorControl.rotatePWMValue <= 480)motorControl.rotatePWMValue += 12;//4
+					if(motorControl.rotatePWMValue <= 470)motorControl.rotatePWMValue += 12;//4
 					pwmUpdateValue(motorControl.rotatePWMValue);//update duty cycle
 				}
 			}
@@ -335,12 +370,12 @@ void accelerateCallback(void){
 			{
 				if((motorControl.rotatePreviousSpeed - motorControl.rotateCurrentSpeed)>1)
 				{
-					if(motorControl.rotatePWMValue <= 480)motorControl.rotatePWMValue += 16;
+					if(motorControl.rotatePWMValue <= 470)motorControl.rotatePWMValue += 20;//16
 					pwmUpdateValue(motorControl.rotatePWMValue);//update duty cycle
 				}
 				else
 				{
-					if(motorControl.rotatePWMValue <= 480)motorControl.rotatePWMValue += 6;
+					if(motorControl.rotatePWMValue <= 470)motorControl.rotatePWMValue += 12;//6
 					pwmUpdateValue(motorControl.rotatePWMValue);//update duty cycle
 				}
 			}
@@ -351,12 +386,12 @@ void accelerateCallback(void){
 			{
 				if((motorControl.rotatePreviousSpeed - motorControl.rotateCurrentSpeed)>1)
 				{
-					if(motorControl.rotatePWMValue <= 480)motorControl.rotatePWMValue += 8;
+					if(motorControl.rotatePWMValue <= 470)motorControl.rotatePWMValue += 14;//8
 					pwmUpdateValue(motorControl.rotatePWMValue);//update duty cycle
 				}
 				else
 				{
-					if(motorControl.rotatePWMValue <= 480)motorControl.rotatePWMValue += 1;
+					if(motorControl.rotatePWMValue <= 470)motorControl.rotatePWMValue += 5;//1
 					pwmUpdateValue(motorControl.rotatePWMValue);//update duty cycle
 				}
 			}
@@ -367,27 +402,28 @@ void accelerateCallback(void){
 			{
 				if((motorControl.rotatePreviousSpeed - motorControl.rotateCurrentSpeed)>1)
 				{
-					if(motorControl.rotatePWMValue <= 480)motorControl.rotatePWMValue += 5;
+					if(motorControl.rotatePWMValue <= 470)motorControl.rotatePWMValue += 8;//7
 					pwmUpdateValue(motorControl.rotatePWMValue);//update duty cycle
 				}
 				else
 				{
-					if(motorControl.rotatePWMValue <= 480)motorControl.rotatePWMValue += 2;
+					if(motorControl.rotatePWMValue <= 470)motorControl.rotatePWMValue += 3;//2
 					pwmUpdateValue(motorControl.rotatePWMValue);//update duty cycle
 				}
 			}
 		}
 		if(motorControl.rotateCurrentSpeed < 5)accelerateChangeDutyCycleDelay = 17000;
-		else if((motorControl.rotateCurrentSpeed >= 5)&&(motorControl.rotateCurrentSpeed<12)) accelerateChangeDutyCycleDelay = 18000;
+		else if((motorControl.rotateCurrentSpeed >= 5)&&(motorControl.rotateCurrentSpeed<20)) accelerateChangeDutyCycleDelay = 18000;//12 upper speed
 		else accelerateChangeDutyCycleDelay = 20000;
 		motorControl.rotatePreviousSpeed = motorControl.rotateCurrentSpeed;
 	}
-	else{//frequency reached
+	else
+	{//accelerate done, change to stable state
 		accelarationStatus = 1;
 	}
 }
 /******************************************************************************/
-uint8_t brakingResistor(uint16_t value){//reserved param
+uint8_t brakingResistor(uint16_t value){//reserved arg
     uint8_t actualState = 1;
     //GPIO_SetBits(GPIOB, GPIO_Pin_12);
 
@@ -402,6 +438,25 @@ uint8_t brakingResistor(uint16_t value){//reserved param
         actualState = 0;
     }*/
     return actualState;
+}
+
+uint8_t brakingResistorPWM(uint8_t value)
+{
+	uint8_t current_state = 0;
+	uint16_t step = 0;
+	if(value <= 100)step = value*10;
+	else step = 1000;
+
+	if(resPwmCounter <= step)
+	{
+		BRAKE_RESISTOR_ENABLE;
+		current_state = 1;
+	}
+	else
+	{
+		BRAKE_RESISTOR_DISABLE;
+	}
+	return current_state;
 }
 
 //******************************************************************************
@@ -432,6 +487,14 @@ void send_reset_pulse(void)
 	rst_event = 1;
 }
 
+uint8_t get_param_status(uint8_t param, uint8_t reg)
+{
+	uint16_t tReg = 0;
+	tReg = spi_read_write(0x9040);
+	return tReg;
+}
+
+
 void rotate_stable(void)
 {
 	if(motorControl.rotateCurrentSpeed == motorControl.freqModbus)
@@ -442,17 +505,12 @@ void rotate_stable(void)
 	{
 		if((motorControl.rotateCurrentSpeed - motorControl.freqModbus)>10)
 		{
-			//if(motorControl.rotatePWMValue >= 7)motorControl.rotatePWMValue -= 7;
 			if(motorControl.coast_mode_state == 0)spi_read_write(0x1044);//entry in coast mode
 			motorControl.coast_mode_state = 1;
-			//spi_read_write(0x1040);
+			if(motorControl.freqModbus <= 50)motorControl.rotatePWMValue = pwm_array[motorControl.freqModbus];//!!!
+			brakeResEnable = 1;//!!!
 		}
-		//else
-		//{
-		//	if(motorControl.rotateCurrentSpeed <= 50)motorControl.rotatePWMValue = pwm_array[motorControl.rotateCurrentSpeed];
-		//	if(motorControl.coast_mode_state == 1)spi_read_write(0x1040);
-		//	motorControl.coast_mode_state = 0;
-		//}
+
 		if(((motorControl.rotateCurrentSpeed - motorControl.freqModbus) > 2)&&((motorControl.rotateCurrentSpeed - motorControl.freqModbus)<=10))
 		{
 			if(motorControl.coast_mode_state == 1)
@@ -460,6 +518,7 @@ void rotate_stable(void)
 				motorControl.coast_mode_state = 0;
 				if(motorControl.rotateCurrentSpeed <= 50)motorControl.rotatePWMValue = pwm_array[motorControl.rotateCurrentSpeed];
 				spi_read_write(0x1040);
+				brakeResEnable = 0;//!!!
 			}
 			if(motorControl.rotatePWMValue>=2) motorControl.rotatePWMValue -= 2;
 		}
@@ -470,6 +529,7 @@ void rotate_stable(void)
 				motorControl.coast_mode_state = 0;
 				if(motorControl.rotateCurrentSpeed <= 50)motorControl.rotatePWMValue = pwm_array[motorControl.rotateCurrentSpeed];
 				spi_read_write(0x1040);
+				brakeResEnable = 0;//!!!
 			}
 			if(motorControl.rotatePWMValue>=1) motorControl.rotatePWMValue -= 1;
 		}
@@ -477,7 +537,19 @@ void rotate_stable(void)
 	}
 	else
 	{
-		if((motorControl.freqModbus - motorControl.rotateCurrentSpeed) > 4)
+		if(motorControl.coast_mode_state == 1)//!!!
+		{
+			motorControl.coast_mode_state = 0;
+			spi_read_write(0x1040);
+			brakeResEnable = 0;
+		}
+
+		if((motorControl.freqModbus - motorControl.rotateCurrentSpeed)> 10)
+		{
+			if(motorControl.rotatePWMValue < 470) motorControl.rotatePWMValue += 10;
+			motorControl.rotateModePrev = 0x00;//return to accelerate mode //!!!
+		}
+		if(((motorControl.freqModbus - motorControl.rotateCurrentSpeed) > 4)&&((motorControl.freqModbus-motorControl.rotateCurrentSpeed)<=10))
 		{
 			if(motorControl.rotatePWMValue < 470) motorControl.rotatePWMValue += 5;
 		}
@@ -492,7 +564,6 @@ void rotate_stable(void)
 		pwmUpdateValue(motorControl.rotatePWMValue);
 	}
 	stableRotateDutyCycleDelay = 20000;//0.2sec update time
-
 }
 void rotate_acceleration_forward()
 {
@@ -532,6 +603,16 @@ void finite_state_machine()
 	if((motorControl.rotateMode == 0x00)&&(motorControl.rotateModePrev == 0x00))
 	{
 		motorControl.rotatePWMValue = 0;//reset pwm signal value to driver input
+
+		/*
+		 * if(faultDetect() == 1)
+		 * {
+		 * 	send_reset_pulse();
+		 * }
+		 *
+		 *
+		 * */
+
 	}
 	if((motorControl.rotateMode == 0x00)&&(motorControl.rotateModePrev == 0x01))//braking procedure, (forward direction))
 	{
@@ -578,6 +659,11 @@ void finite_state_machine()
 			spi_read_write(0x1040);
 		}
 		rotate_acceleration_forward();
+
+		if(motorControl.rotateCurrentSpeed >= motorControl.freqModbus)
+		{
+			motorControl.rotateModePrev = 0x01;
+		}
 	}
 	if((motorControl.rotateMode == 0x02)&&(motorControl.rotateModePrev == 0x00))//start from idle state, reverse direction
 	{
@@ -595,6 +681,11 @@ void finite_state_machine()
 			motorControl.rotateDirection = 1;
 		}
 		rotate_acceleration_reverse();
+
+		if(motorControl.rotateCurrentSpeed >= motorControl.freqModbus)
+		{
+			motorControl.rotateModePrev = 0x02;
+		}
 	}
 	if((motorControl.rotateMode == 0x01)&&(motorControl.rotateModePrev == 0x02))//change rotate direction from reverse to forward
 	{
