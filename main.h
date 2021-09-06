@@ -50,8 +50,8 @@ uint8_t microStop = 0;
 #define HALL_POWER_ON GPIOB->BSRR = GPIO_Pin_11
 #define HALL_POWER_OFF GPIOB->BRR = GPIO_Pin_11
 
-#define BRAKE_RESISTOR_ENABLE GPIOB->BRR = GPIO_Pin_12
-#define BRAKE_RESISTOR_DISABLE GPIOB->BSRR = GPIO_Pin_12
+#define BRAKE_RESISTOR_ENABLE GPIOB->BRR = GPIO_Pin_13
+#define BRAKE_RESISTOR_DISABLE GPIOB->BSRR = GPIO_Pin_13
 /******************************************************************************/
 
 //NET_ADRESS
